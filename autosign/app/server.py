@@ -9,7 +9,7 @@ import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from zoneinfo import ZoneInfo
-from engine import DEFAULT, PROVIDERS, execute, validate
+from engine import DEFAULT, PROVIDERS, execute, validate, migrate
 
 DATA = Path(os.environ.get('AUTOSIGN_DATA', '/data'))
 TOKEN = secrets.token_urlsafe(32)
@@ -33,7 +33,8 @@ def load():
     global CONFIG
     DATA.mkdir(parents=True, exist_ok=True)
     if (DATA / 'config.json').exists():
-        CONFIG = validate(json.loads((DATA / 'config.json').read_text(encoding='utf-8')))
+        CONFIG = migrate(json.loads((DATA / 'config.json').read_text(encoding='utf-8')))
+        write_json(DATA / 'config.json', CONFIG)
     if (DATA / 'state.json').exists():
         STATE.update(json.loads((DATA / 'state.json').read_text(encoding='utf-8')))
     STATE['running'] = False
@@ -151,7 +152,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     load()
     threading.Thread(target=scheduler, daemon=True).start()
-    LOG.info('AutoSign 0.1.1 listening on ingress port 8099; XiaoHeiHe untested')
+    LOG.info('AutoSign 0.1.2 listening on ingress port 8099; XiaoHeiHe untested')
     ThreadingHTTPServer(('0.0.0.0', 8099), Handler).serve_forever()
 
 if __name__ == '__main__':

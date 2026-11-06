@@ -1,6 +1,6 @@
 # AutoSign Home Assistant add-on
 
-将 [AutoSign-Bot-msg-Pusher](https://github.com/MikasaEureka/AutoSign-Bot-msg-Pusher) 适配为 Home Assistant OS / Supervised 加载项（新版本 HA 称为“应用”）。提供中文 Ingress 页面、每日计划、按平台手动签到，以及原项目的 Qmsg、Server 酱、企业微信、钉钉推送。
+将 [AutoSign-Bot-msg-Pusher](https://github.com/MikasaEureka/AutoSign-Bot-msg-Pusher) 适配为 Home Assistant OS / Supervised 加载项（新版本 HA 称为“应用”）。提供中文 Ingress 页面、每日计划、按平台手动签到，并通过 HA 内置持久通知展示结果。
 
 **小黑盒未测试，默认关闭，不保证可用。其他平台的真实账户验证状态见 [验证报告](VALIDATION.md)，不能将容器启动成功视为签到验证成功。**
 
@@ -26,7 +26,15 @@
 | 网易云游戏 | Authorization 值 | 在官网登录后，从开发者工具请求头获取完整值 |
 | 小黑盒 | Cookie，IMEI 可选 | **未测试**；沿用旧版接口与第三方 HTTP 签名服务 |
 
-平台凭据请在本地 HA 页面填写。不要将凭据放入 GitHub Issue、截图或仓库。密码、Cookie 和推送密钥保存在加载项私有 `/data/config.json`，HA 备份可能包含该文件。页面由 HA Ingress 鉴权，未开放宿主机端口，不需要 HA API、Supervisor API、主机网络或特权权限。
+平台凭据请在本地 HA 页面填写。不要将凭据放入 GitHub Issue、截图或仓库。密码和 Cookie 保存在加载项私有 `/data/config.json`，HA 备份可能包含该文件。页面由 HA Ingress 鉴权，未开放宿主机端口。加载项使用 HA API 权限发送内置通知，不需要手填 HA 令牌，也不需要 Supervisor 管理 API、主机网络或特权权限。
+
+## HA 原生消息提醒
+
+默认开启“签到完成后发送 HA 持久通知”。每次有平台执行结果时，会调用 `persistent_notification.create`，在 HA 通知栏显示结果。通知 ID 固定为 `autosign_results`，后续运行更新同一条通知。
+
+不再配置 Qmsg、Server 酱、企业微信或钉钉密钥。由旧版升级时，账户和定时设置会保留，旧外部推送配置会迁移为 HA 通知开关。若通知发送失败，页面会分别显示通知失败与实际签到结果。
+
+从 0.1.1 升级到 0.1.2 需要重启此加载项以启用新增 HA API 权限，不需要重启 HA Core。此项目的实机调试会先取得用户的当次重启授权。
 
 ## 定时与手动执行
 
@@ -35,7 +43,7 @@
 - 执行记录持久化，避免正常重启后重复自动签到。为避免崩溃时重复提交，会在运行前记录当日计划已触发；中途崩溃需手动检查并执行。
 - 手动执行可以重复触发；任务运行期间拒绝重复启动或修改配置。只执行已启用的平台。
 - 各平台分别处理异常，一个平台失败会继续下一个。HTTP 有连接/读取超时，不自动重试签到请求。
-- 推送和签到结果分别显示；推送失败不会将签到结果改为成功。
+- 通知和签到结果分别显示；通知失败不会更改签到结果。
 - Cookie 过期或接口变化需要更新配置。上游已有平台接口可能失效，兼容代码不代表平台可用承诺。
 
 ## 本地开发

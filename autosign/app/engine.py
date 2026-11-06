@@ -6,7 +6,7 @@ import time
 from urllib.parse import parse_qsl, unquote
 from zoneinfo import ZoneInfo
 from upstream.sign import gtfed, Miui, JiaoYiMao, TYYP, wyyyx, XiaoHeiHe
-from upstream.push import Push
+from notifications import send_notification
 from http_client import local
 
 PROVIDERS = {
@@ -21,12 +21,15 @@ DEFAULT = {
     'schedule_enabled': False, 'run_time': '07:00', 'timezone': 'Asia/Hong_Kong',
     'accounts': {key: {'switch': False, **{field: '' for field in fields}}
                  for key, (_, _, _, fields) in PROVIDERS.items()},
-    'push': {'PushMode': '', 'PushKey': {
-        'Qmsg': '', 'Server': '',
-        'Epwc': {'EnterpriseId': '', 'AppId': '', 'AppSecret': '', 'UserUid': ''},
-        'Dingtalk': {'token': '', 'secret': '', 'atuser': '', 'atMobiles': '', 'isAtAll': False},
-    }},
+    'push': {'enabled': True},
 }
+
+def migrate(value):
+    value = copy.deepcopy(value)
+    if isinstance(value, dict) and isinstance(value.get('push'), dict) and 'PushMode' in value['push']:
+        value['push'] = {'enabled': True}
+    return validate(value)
+
 
 def validate(value):
     if not isinstance(value, dict) or set(value) != set(DEFAULT):
@@ -54,17 +57,6 @@ def validate(value):
         fields = PROVIDERS[key][3]
         if account['switch'] and any(not account[f].strip() for f in fields if f != 'imei'):
             raise ValueError(f'{PROVIDERS[key][0]}：请填写所需账户信息')
-    if value['push']['PushMode'] not in ('', 'qmsg', 'server', 'epwc', 'dingtalk'):
-        raise ValueError('未知推送方式')
-    mode = value['push']['PushMode']
-    keys = value['push']['PushKey']
-    required = {'qmsg': [keys['Qmsg']], 'server': [keys['Server']],
-                'epwc': [keys['Epwc'][field] for field in ('EnterpriseId', 'AppId', 'AppSecret', 'UserUid')],
-                'dingtalk': [keys['Dingtalk']['token']]}
-    if mode and any(not text.strip() for text in required[mode]):
-        raise ValueError('请填写所选推送方式的必填信息')
-    if mode == 'epwc' and not keys['Epwc']['AppId'].isdigit():
-        raise ValueError('企业微信 AppId 须为数字')
     return copy.deepcopy(value)
 
 def secrets(config):
@@ -76,7 +68,6 @@ def secrets(config):
         elif isinstance(node, str) and node:
             values.append(node)
     walk(config['accounts'])
-    walk(config['push']['PushKey'])
     for account in config['accounts'].values():
         cookie = account.get('cookie', '')
         # Redact individual form/Cookie values as well as the complete captured string.
@@ -116,11 +107,12 @@ def execute(config, selected=None):
                             'message': f'请求失败（{type(exc).__name__}），请检查登录状态、网络或接口变化'})
         logging.getLogger('autosign').info('Platform %s completed: %s', key, results[-1]['status'])
     push_status = 'disabled'
-    if results and config['push']['PushMode']:
+    if results and config['push']['enabled']:
         local.deadline = time.monotonic() + 60
         try:
-            Push('\n'.join(r['name'] + ': ' + r['message'] for r in results), config['push']).push()
+            send_notification(results)
             push_status = 'sent'
         except Exception as exc:
             push_status = 'failed:' + type(exc).__name__
+        logging.getLogger('autosign').info('HA notification: %s', push_status)
     return {'results': results, 'push': push_status}

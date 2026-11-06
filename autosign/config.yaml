@@ -1,7 +1,7 @@
 name: AutoSign 自动签到
-version: "0.1.1"
+version: "0.1.2"
 slug: autosign
-description: 每日自动签到与消息推送（小黑盒未测试）
+description: 每日自动签到与 HA 原生消息提醒（小黑盒未测试）
 url: https://github.com/aemediatodd/ha-autosign-addon
 image: ghcr.io/aemediatodd/ha-autosign-addon
 arch:
@@ -10,6 +10,7 @@ arch:
 startup: application
 boot: manual
 init: false
+homeassistant_api: true
 ingress: true
 ingress_port: 8099
 panel_icon: mdi:calendar-check

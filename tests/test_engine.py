@@ -25,11 +25,12 @@ def test_config_requires_enabled_credentials_and_valid_schedule():
     with pytest.raises(ValueError):
         engine.validate(config)
 
-def test_missing_push_config_cannot_report_sent():
+def test_notification_enabled_requires_boolean():
     config = copy.deepcopy(engine.DEFAULT)
-    config['push']['PushMode'] = 'dingtalk'
+    config['push']['enabled'] = 'yes'
     with pytest.raises(ValueError):
         engine.validate(config)
+
 
 def test_miui_login_returns_actual_cookies(monkeypatch):
     response = Mock(text='1', cookies={'session': 'test-cookie'})
@@ -66,15 +67,16 @@ def test_http_budget_prevents_further_requests(monkeypatch):
     with pytest.raises(requests.Timeout):
         http_client.get('https://example.invalid')
 
-def test_push_rejection_is_not_reported_as_sent(monkeypatch):
+def test_ha_notification_failure_preserves_sign_result(monkeypatch):
     config = copy.deepcopy(engine.DEFAULT)
     config['accounts']['gtfed'].update(switch=True, cookie='fake-cookie')
-    config['push']['PushMode'] = 'dingtalk'
-    config['push']['PushKey']['Dingtalk']['token'] = 'fake-token'
     fake = Mock(return_value=Mock(Sign=Mock(return_value='签到成功')))
     monkeypatch.setitem(engine.PROVIDERS, 'gtfed', ('好游快爆', fake, 'Sign', ('cookie',)))
-    monkeypatch.setattr(http_client, 'post', Mock(return_value=Mock(json=Mock(return_value={'errcode': 310000}))))
-    assert engine.execute(config)['push'].startswith('failed:')
+    monkeypatch.setattr(engine, 'send_notification', Mock(side_effect=requests.HTTPError('test failure')))
+    result = engine.execute(config)
+    assert result['push'].startswith('failed:')
+    assert result['results'][0]['status'] == 'success'
+
 
 def test_cloud189_current_login_encrypts_credentials():
     public, private = rsa.newkeys(512)
