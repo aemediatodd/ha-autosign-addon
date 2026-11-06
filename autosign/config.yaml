@@ -1,0 +1,18 @@
+name: AutoSign 自动签到
+version: "0.1.0"
+slug: autosign
+description: 每日自动签到与消息推送（小黑盒未测试）
+url: https://github.com/aemediatodd/ha-autosign-addon
+image: ghcr.io/aemediatodd/ha-autosign-addon
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: manual
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:calendar-check
+panel_title: 自动签到
+options: {}
+schema: {}

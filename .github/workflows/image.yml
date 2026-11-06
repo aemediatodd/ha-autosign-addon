@@ -1,0 +1,43 @@
+name: Publish add-on image
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Read add-on version
+        id: version
+        run: |
+          python - <<'PY'
+          import os, re
+          version = re.search(r'^version: "([^"]+)"', open('autosign/config.yaml').read(), re.M).group(1)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              print('value=' + version, file=out)
+          PY
+      - uses: docker/build-push-action@v6
+        with:
+          context: autosign
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/aemediatodd/ha-autosign-addon:${{ steps.version.outputs.value }}
+            ghcr.io/aemediatodd/ha-autosign-addon:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/aemediatodd/ha-autosign-addon
+            org.opencontainers.image.title=AutoSign Home Assistant add-on
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+            io.hass.type=addon
+            io.hass.version=${{ steps.version.outputs.value }}
