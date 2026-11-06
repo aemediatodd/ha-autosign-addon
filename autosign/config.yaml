@@ -1,5 +1,5 @@
 name: AutoSign 自动签到
-version: "0.1.0"
+version: "0.1.1"
 slug: autosign
 description: 每日自动签到与消息推送（小黑盒未测试）
 url: https://github.com/aemediatodd/ha-autosign-addon

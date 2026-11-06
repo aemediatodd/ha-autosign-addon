@@ -20,7 +20,7 @@
 | 平台 | 必填内容 | 说明 |
 | --- | --- | --- |
 | MIUI 历史版本 | 账号、密码 | 自动登录取得 Cookie 后签到 |
-| 好游快爆 | 完整表单请求体 | 来自 `huodong3.3839.com/n/hykb/grow/ajax.php`；沿用上游字段名 cookie，但不是 HTTP Cookie 头 |
+| 好游快爆 | 完整签到表单请求体 | 来自 `huodong3.3839.com/n/hykb/cornfarm/ajax_sign.php`，包含 `ac=Sign`、登录与设备参数；沿用上游字段名 cookie，但不是 HTTP Cookie 头。旧 grow 接口已跳转，需重新抓取新版请求 |
 | 交易猫 | Cookie | 如站点需要 CSRF，Cookie 中应含当前 `_csrfToken`；已移除原代码的固定 CSRF 值 |
 | 天翼云盘 | 账号、密码 | 登录可能受验证码、风控或上游接口变化影响；不自动绕过验证码 |
 | 网易云游戏 | Authorization 值 | 在官网登录后，从开发者工具请求头获取完整值 |
@@ -49,6 +49,6 @@ python -m pytest -q
 
 ## 来源与改动
 
-基于上游提交 `b6d58d2` 的签到和推送实现，保留相关来源说明；原说明存放于 [UPSTREAM_README.md](UPSTREAM_README.md)。此适配新增了 HA 加载项封装、Ingress 配置页、调度、持久化、超时、错误隔离和测试，并修复 MIUI 登录 Cookie 判断、天翼登录失败后继续签到及推送错误报告等问题。
+基于上游提交 `b6d58d2` 的签到和推送实现，保留相关来源说明；原说明存放于 [UPSTREAM_README.md](UPSTREAM_README.md)。此适配新增了 HA 加载项封装、Ingress 配置页、调度、持久化、超时、错误隔离和测试，并修复 MIUI 登录 Cookie 判断、天翼登录失败后继续签到及推送错误报告等问题。0.1.1 根据当前公开登录流程更新天翼云盘登录协议与好游快爆玉米农场签到接口；真实账户验证范围仍以验证报告为准。
 
 上游仓库未提供根目录 LICENSE，本仓库不为上游代码另行声明许可证。第三方来源与范围见 [NOTICE.md](NOTICE.md)。

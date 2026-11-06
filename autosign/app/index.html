@@ -10,7 +10,7 @@
 <button id="save">保存配置（立即生效）</button><p class="warn">小黑盒：未测试，默认关闭；沿用上游旧接口及第三方 HTTP 签名服务，不保证可用。</p>
 <script>
 const token='__CSRF_TOKEN__';let config;
-const platforms={MiUI:['MIUI 历史版本',{user:'账号',password:'密码'}],gtfed:['好游快爆',{cookie:'抓包取得的完整表单请求体（不是 Cookie 头）'}],JiaoYiMao:['交易猫',{cookie:'Cookie（包含 _csrfToken，如有）'}],tyyp:['天翼云盘',{username:'账号',password:'密码'}],wyyyx:['网易云游戏',{cookie:'Authorization 完整值'}],XiaoHeiHe:['小黑盒（未测试）',{cookie:'Cookie',imei:'IMEI（可选）'}]};
+const platforms={MiUI:['MIUI 历史版本',{user:'账号',password:'密码'}],gtfed:['好游快爆',{cookie:'新版玉米农场 ajax_sign.php 的完整签到表单（不是 Cookie 头）'}],JiaoYiMao:['交易猫',{cookie:'Cookie（包含 _csrfToken，如有）'}],tyyp:['天翼云盘',{username:'账号',password:'密码'}],wyyyx:['网易云游戏',{cookie:'Authorization 完整值'}],XiaoHeiHe:['小黑盒（未测试）',{cookie:'Cookie',imei:'IMEI（可选）'}]};
 function el(tag,text){const e=document.createElement(tag);if(text)e.textContent=text;return e}
 async function api(path,body){const r=await fetch('./api/'+path,{method:body===undefined?'GET':'POST',headers:{'X-AutoSign-Token':token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const v=await r.json();if(!r.ok)throw Error(v.error||'请求失败或任务正在运行');return v}
 function note(s){document.getElementById('notice').textContent=s}

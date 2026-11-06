@@ -151,7 +151,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     load()
     threading.Thread(target=scheduler, daemon=True).start()
-    LOG.info('AutoSign 0.1.0 listening on ingress port 8099; XiaoHeiHe untested')
+    LOG.info('AutoSign 0.1.1 listening on ingress port 8099; XiaoHeiHe untested')
     ThreadingHTTPServer(('0.0.0.0', 8099), Handler).serve_forever()
 
 if __name__ == '__main__':

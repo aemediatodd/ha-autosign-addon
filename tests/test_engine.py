@@ -2,9 +2,10 @@ import copy
 from unittest.mock import Mock
 import pytest
 import requests
+import rsa
 import engine
 import http_client
-from upstream.sign import Miui
+from upstream.sign import Miui, TYYP, gtfed
 
 def test_defaults_make_no_network_requests(monkeypatch):
     monkeypatch.setattr(requests.Session, 'request', Mock(side_effect=AssertionError('Unexpected network')))
@@ -74,3 +75,71 @@ def test_push_rejection_is_not_reported_as_sent(monkeypatch):
     monkeypatch.setitem(engine.PROVIDERS, 'gtfed', ('好游快爆', fake, 'Sign', ('cookie',)))
     monkeypatch.setattr(http_client, 'post', Mock(return_value=Mock(json=Mock(return_value={'errcode': 310000}))))
     assert engine.execute(config)['push'].startswith('failed:')
+
+def test_cloud189_current_login_encrypts_credentials():
+    public, private = rsa.newkeys(512)
+    key = public.save_pkcs1('PEM')
+    # The server supplies an OpenSSL SubjectPublicKeyInfo public key.
+    import base64
+    import pyasn1.codec.der.encoder
+    import pyasn1.type.univ
+    import pyasn1.codec.der.decoder
+    pubseq, _ = pyasn1.codec.der.decoder.decode(public.save_pkcs1('DER'))
+    algorithm = pyasn1.type.univ.Sequence()
+    algorithm.setComponentByPosition(0, pyasn1.type.univ.ObjectIdentifier('1.2.840.113549.1.1.1'))
+    algorithm.setComponentByPosition(1, pyasn1.type.univ.Null(''))
+    subject = pyasn1.type.univ.Sequence()
+    subject.setComponentByPosition(0, algorithm)
+    subject.setComponentByPosition(1, pyasn1.type.univ.BitString.fromOctetString(pyasn1.codec.der.encoder.encode(pubseq)))
+    pem_body = base64.b64encode(pyasn1.codec.der.encoder.encode(subject)).decode()
+    session = Mock()
+    session.get.side_effect = [Mock(url='https://open.e.189.cn/login?appId=cloud&lt=test-lt&reqId=test-id'), Mock()]
+    conf = {'appKey': 'cloud', 'returnUrl': 'https://cloud.189.cn/callback', 'paramId': 'test-param'}
+    session.post.side_effect = [
+        Mock(json=lambda: {'result': 0, 'data': conf}),
+        Mock(json=lambda: {'result': 0, 'data': {'pubKey': pem_body, 'pre': '{RSA}'}}),
+        Mock(json=lambda: {'result': 0, 'toUrl': 'https://cloud.189.cn/callback'}),
+    ]
+    account = copy.deepcopy(engine.DEFAULT)['accounts']
+    result = TYYP(account).Login(session, 'test-user', 'test-password')
+    assert result is session
+    payload = session.post.call_args.kwargs['data']
+    assert rsa.decrypt(base64.b64decode(payload['userName'][5:]), private) == b'test-user'
+    assert rsa.decrypt(base64.b64decode(payload['epd'][5:]), private) == b'test-password'
+    assert payload['returnUrl'] == 'https%3A%2F%2Fcloud.189.cn%2Fcallback'
+    assert 'password' not in payload
+
+def test_cloud189_rejects_stale_login_page_before_sending_password():
+    session = Mock()
+    session.get.return_value.url = 'https://open.e.189.cn/unexpected'
+    account = copy.deepcopy(engine.DEFAULT)['accounts']
+    assert TYYP(account).Login(session, 'test-user', 'test-password') is None
+    session.post.assert_not_called()
+
+def test_cloud189_lottery_failure_preserves_success(monkeypatch):
+    from unittest.mock import MagicMock
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.get.side_effect = [Mock(json=lambda: {'netdiskBonus': 50, 'isSign': False}), requests.Timeout(), requests.Timeout()]
+    monkeypatch.setattr(http_client, 'Session', Mock(return_value=session))
+    monkeypatch.setattr(TYYP, 'Login', Mock(return_value=session))
+    account = copy.deepcopy(engine.DEFAULT)['accounts']
+    account['tyyp'].update(username='test', password='test')
+    message = TYYP(account).Sgin()
+    assert '签到成功' in message
+    assert message.count('抽奖请求失败') == 2
+
+def test_3839_current_endpoint_accepts_new_success_code(monkeypatch):
+    post = Mock(return_value=Mock(json=lambda: {'key': '1001'}))
+    monkeypatch.setattr(http_client, 'post', post)
+    account = copy.deepcopy(engine.DEFAULT)['accounts']
+    account['gtfed']['cookie'] = 'ac=Sign&token=test'
+    assert '签到成功' in gtfed(account).Sign()
+    assert '/cornfarm/ajax_sign.php' in post.call_args.kwargs['url']
+
+def test_redacts_individual_cookie_and_form_values():
+    config = copy.deepcopy(engine.DEFAULT)
+    config['accounts']['gtfed']['cookie'] = 'token=secret-one&other=secret-two'
+    config['accounts']['JiaoYiMao']['cookie'] = 'sid=secret-three; _csrfToken=secret-four'
+    message = engine.redact('secret-one secret-two secret-three secret-four', config)
+    assert 'secret-' not in message

@@ -4,6 +4,7 @@ import time
 import re
 import rsa
 import base64
+from urllib.parse import parse_qs, urlsplit, quote
 from upstream.log import Log
 
 log = Log()
@@ -11,7 +12,7 @@ log = Log()
 class gtfed():
     """好游快爆签到
     """
-    url = 'https://huodong3.3839.com/n/hykb/grow/ajax.php'
+    url = 'https://huodong3.3839.com/n/hykb/cornfarm/ajax_sign.php'
     def __init__(self,SignToken) -> None:
         self.gtfed = SignToken['gtfed']['cookie']
         self.head = {
@@ -19,22 +20,20 @@ class gtfed():
             "Origin":"https://huodong3.3839.com",
             "X-Requested-With":"XMLHttpRequest",
             "Content-Type":"application/x-www-form-urlencoded; charset=UTF-8",
-            "Referer":"https://huodong3.3839.com/n/hykb/grow/index.php",
+            "Referer":"https://huodong3.3839.com/n/hykb/cornfarm/index.php",
 	    }
 
     def Sign(self):
         if self.gtfed != "":
             zz = requests.post(url=self.url,data=self.gtfed,headers=self.head).json()
-            if zz['key'] == 'ok':
-                if zz['csd_jdt'] == "100%":
-                    log.info("好游快爆:爆米进度已满")
-                    return "好游快爆:爆米进度已满"
-                else:
-                    log.info("好游快爆:签到成功")
-                    return "好游快爆:签到成功"
-            else:
-                log.info(f"好游快爆:{zz['info']}")
-                return f"好游快爆:{zz['info']}"
+            key = str(zz.get('key', ''))
+            if key in ('ok', '1001'):
+                return "好游快爆:签到成功"
+            if key == '1002':
+                return "好游快爆:尚未播种，请先在 App 中播种"
+            if key == '1003':
+                return "好游快爆:玉米进度已满，请在 App 中收割"
+            return "好游快爆:" + str(zz.get('info') or zz.get('tip') or "登录失效或需要在 App 中完成验证")
         else:
             log.info("好游快爆:没有配置cookie")
             return "好游快爆:没有配置cookie"
@@ -197,143 +196,88 @@ class TYYP():
         self.username = SignToken['tyyp']['username']
         self.password = SignToken['tyyp']['password']
 
-    def int2char(self,a):
-        BI_RM = list("0123456789abcdefghijklmnopqrstuvwxyz")
-        return BI_RM[a]
-
-    def b64tohex(self,a):
-        d = ""
-        e = 0
-        c = 0
-        b64map = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-        for i in range(len(a)):
-            if list(a)[i] != "=":
-                v = b64map.index(list(a)[i])
-                if 0 == e:
-                    e = 1
-                    d += self.int2char(v >> 2)
-                    c = 3 & v
-                elif 1 == e:
-                    e = 2
-                    d += self.int2char(c << 2 | v >> 4)
-                    c = 15 & v
-                elif 2 == e:
-                    e = 3
-                    d += self.int2char(c)
-                    d += self.int2char(v >> 2)
-                    c = 3 & v
-                else:
-                    e = 0
-                    d += self.int2char(c << 2 | v >> 4)
-                    d += self.int2char(15 & v)
-        if e == 1:
-            d += self.int2char(c << 2)
-        return d
-
-    def rsa_encode(self,j_rsakey, string):
-        rsa_key = f"-----BEGIN PUBLIC KEY-----\n{j_rsakey}\n-----END PUBLIC KEY-----"
-        pubkey = rsa.PublicKey.load_pkcs1_openssl_pem(rsa_key.encode())
-        result = self.b64tohex((base64.b64encode(rsa.encrypt(f'{string}'.encode(), pubkey))).decode())
-        return result
-
-    def Login(self,s,username,password):
-        url = "https://cloud.189.cn/api/portal/loginUrl.action?redirectURL=https%3A%2F%2Fcloud.189.cn%2Fweb%2Fredirect.html"
-        r = s.get(url)
-        captchaToken = re.findall(r"captchaToken' value='(.+?)'", r.text)[0]
-        lt = re.findall(r'lt = "(.+?)"', r.text)[0]
-        returnUrl = re.findall(r"returnUrl = '(.+?)'", r.text)[0]
-        paramId = re.findall(r'paramId = "(.+?)"', r.text)[0]
-        j_rsakey = re.findall(r'j_rsaKey" value="(\S+)"', r.text, re.M)[0]
-        s.headers.update({"lt": lt})
-        username = self.rsa_encode(j_rsakey, username)
-        password = self.rsa_encode(j_rsakey, password)
-        url = "https://open.e.189.cn/api/logbox/oauth2/loginSubmit.do"
+    def Login(self, session, username, password):
+        """Current Cloud189 web login protocol; stop if verification is required."""
+        entry = session.get(
+            "https://cloud.189.cn/api/portal/loginUrl.action",
+            params={"redirectURL": "https://cloud.189.cn/web/redirect.html"},
+        )
+        query = parse_qs(urlsplit(entry.url).query)
+        if not all(query.get(key) for key in ('appId', 'lt', 'reqId')):
+            return None
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:74.0) Gecko/20100101 Firefox/76.0',
-            'Referer': 'https://open.e.189.cn/',
+            'User-Agent': 'Mozilla/5.0', 'Referer': entry.url,
+            'lt': query['lt'][0], 'reqId': query['reqId'][0],
         }
-        data = {
-            "appKey": "cloud",
-            "accountType": '01',
-            "userName": f"{{RSA}}{username}",
-            "password": f"{{RSA}}{password}",
-            "validateCode": "",
-            "captchaToken": captchaToken,
-            "returnUrl": returnUrl,
-            "mailSuffix": "@189.cn",
-            "paramId": paramId
+        base = "https://open.e.189.cn"
+        app = session.post(
+            base + '/api/logbox/oauth2/appConf.do',
+            headers=headers, data={'version': '2.0', 'appKey': query['appId'][0]},
+        ).json()
+        encryption = session.post(
+            base + '/api/logbox/config/encryptConf.do',
+            headers=headers, data={'appId': query['appId'][0]},
+        ).json()
+        if str(app.get('result')) != '0' or str(encryption.get('result')) != '0':
+            return None
+        conf = app['data']
+        key = encryption['data']['pubKey']
+        if 'BEGIN PUBLIC KEY' not in key:
+            key = '-----BEGIN PUBLIC KEY-----\n' + key + '\n-----END PUBLIC KEY-----'
+        public_key = rsa.PublicKey.load_pkcs1_openssl_pem(key.encode())
+        prefix = encryption['data'].get('pre', '{RSA}')
+        def encrypt(value):
+            return prefix + base64.b64encode(rsa.encrypt(value.encode(), public_key)).decode()
+        payload = {
+            field: conf.get(field, '') for field in
+            ('appKey', 'pageKey', 'accountType', 'mailSuffix', 'clientType', 'isOauth2', 'state', 'paramId')
         }
-        r = s.post(url, data=data, headers=headers, timeout=5)
-        if (r.json()['result'] == 0):
-            log.info(f"天翼云盘:{r.json()['msg']}")
-        else:
-            log.info(f"天翼云盘:{r.json()['msg']}")
-        try:
-            redirect_url = r.json()['toUrl']
-            r = s.get(redirect_url)
-            return s
-        except Exception:
-            pass
+        payload.update({
+            'version': 'v2.0', 'userName': encrypt(username), 'epd': encrypt(password),
+            'returnUrl': quote(conf['returnUrl'], safe=''), 'dynamicCheck': 'FALSE',
+            'captchaType': '', 'validateCode': '', 'smsValidateCode': '',
+            'captchaToken': '', 'apToken': '', 'cb_SaveName': '0',
+        })
+        result = session.post(base + '/api/logbox/oauth2/loginSubmit.do', headers=headers, data=payload).json()
+        if str(result.get('result')) != '0' or not result.get('toUrl'):
+            return None
+        target = urlsplit(result['toUrl'])
+        if target.scheme != 'https' or not target.hostname or not (
+            target.hostname == '189.cn' or target.hostname.endswith('.189.cn')
+        ):
+            return None
+        session.get(result['toUrl'])
+        return session
 
     def Sgin(self):
-        try:
-            if self.username != "" and self.password != "":
-                s = requests.Session()
-                if self.Login(s, self.username, self.password) is None:
-                    return "天翼云盘:登录失败或需要验证码"
-                rand = str(round(time.time() * 1000))
-                surl = f'https://api.cloud.189.cn/mkt/userSign.action?rand={rand}&clientType=TELEANDROID&version=8.6.3&model=SM-G930K'
-                url = f'https://m.cloud.189.cn/v2/drawPrizeMarketDetails.action?taskId=TASK_SIGNIN&activityId=ACT_SIGNIN'
-                url2 = f'https://m.cloud.189.cn/v2/drawPrizeMarketDetails.action?taskId=TASK_SIGNIN_PHOTOS&activityId=ACT_SIGNIN'
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 5.1.1; SM-G930K Build/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/74.0.3729.136 Mobile Safari/537.36 Ecloud/8.6.3 Android/22 clientId/355325117317828 clientModel/SM-G930K imsi/460071114317824 clientChannelId/qq proVersion/1.0.6',
-                    "Referer": "https://m.cloud.189.cn/zhuanti/2016/sign/index.jsp?albumBackupOpened=1",
-                    "Host": "m.cloud.189.cn",
-                    "Accept-Encoding": "gzip, deflate",
-                }
-                # 签到
-                response = s.get(surl, headers=headers)
-                netdiskBonus = response.json()['netdiskBonus']
-                if response.json()['isSign'] in (False, "false"):
-                    log.info(f"天翼云盘:签到成功，获得：{netdiskBonus}M空间")
-                    message =  f"天翼云盘:签到成功，获得：{netdiskBonus}M空间"
-                else:
-                    log.info(f"天翼云盘:已经签到过了，获得：{netdiskBonus}M空间")
-                    message =  f"天翼云盘:已经签到过了，获得：{netdiskBonus}M空间"
-
-                # 第一次抽奖
-                response = s.get(url, headers=headers).json()
-                try:
-                    if "errorCode" in response:
-                        log.info("天翼云盘:第一次抽奖-没有抽奖次数")
-                        message += "\n天翼云盘:第一次抽奖-没有抽奖次数"
-                    else:
-                        log.info(f"天翼云盘:第一次抽奖获得{response['prizeName']}")
-                        message += f"\n天翼云盘:第一次抽奖获得{response['prizeName']}"
-                except Exception as er:
-                    log.info(f"天翼云盘:第一次抽奖出现了错误:{er}")
-                    message += f"\n天翼云盘:第一次抽奖出现了错误:{er}"
-
-                # 第二次抽奖
-                response = s.get(url2, headers=headers).json()
-                try:
-                    if "errorCode" in response:
-                        log.info("天翼云盘:第二次抽奖-没有抽奖次数")
-                        message += "\n天翼云盘:第二次抽奖-没有抽奖次数"
-                    else:
-                        log.info(f"天翼云盘:第二次抽奖获得{response['prizeName']}")
-                        message += f"\n天翼云盘:第二次抽奖获得{response['prizeName']}"
-                except Exception as er:
-                    log.info(f"天翼云盘:第二次抽奖出现了错误:{er}")
-                    message += f"\n天翼云盘:第二次抽奖出现了错误:{er}"
-                return message
+        if not self.username or not self.password:
+            return "天翼云盘:账号或密码不能为空"
+        with requests.Session() as session:
+            if self.Login(session, self.username, self.password) is None:
+                return "天翼云盘:登录失败、凭据失效或需要在官网登录完成验证"
+            headers = {'User-Agent': 'Mozilla/5.0 Ecloud/8.6.3', 'Referer': 'https://m.cloud.189.cn/'}
+            data = session.get(
+                'https://api.cloud.189.cn/mkt/userSign.action', headers=headers,
+                params={'rand': str(round(time.time() * 1000)), 'clientType': 'TELEANDROID',
+                        'version': '8.6.3', 'model': 'SM-G930K'},
+            ).json()
+            if 'netdiskBonus' not in data or 'isSign' not in data:
+                return "天翼云盘:签到失败，登录状态或平台接口已变化"
+            if data['isSign'] in (False, 'false'):
+                message = f"天翼云盘:签到成功，获得 {data['netdiskBonus']}M 空间"
             else:
-                log.info("天翼云盘:账号或密码不能为空")
-                return "天翼云盘:账号或密码不能为空"
-        except Exception as er:
-            log.info(f"天翼云盘:出现了错误:{er}")
-            return f"天翼云盘:出现了错误:{er}"
-
+                message = f"天翼云盘:已经签到过了，获得 {data['netdiskBonus']}M 空间"
+            for task in ('TASK_SIGNIN', 'TASK_SIGNIN_PHOTOS'):
+                try:
+                    prize = session.get(
+                        'https://m.cloud.189.cn/v2/drawPrizeMarketDetails.action', headers=headers,
+                        params={'taskId': task, 'activityId': 'ACT_SIGNIN'},
+                    ).json()
+                    detail = str(prize['prizeName']) if 'prizeName' in prize else '没有抽奖次数或接口未接受请求'
+                except Exception:
+                    detail = '抽奖请求失败，签到结果不受影响'
+                message += '\n天翼云盘:' + task + ' - ' + detail
+            return message
 
 # 网易云游戏签到
 class wyyyx():

@@ -1,7 +1,9 @@
 """Validated configuration, isolated execution, and secret-free persisted results."""
 import copy
+import logging
 import re
 import time
+from urllib.parse import parse_qsl, unquote
 from zoneinfo import ZoneInfo
 from upstream.sign import gtfed, Miui, JiaoYiMao, TYYP, wyyyx, XiaoHeiHe
 from upstream.push import Push
@@ -75,6 +77,12 @@ def secrets(config):
             values.append(node)
     walk(config['accounts'])
     walk(config['push']['PushKey'])
+    for account in config['accounts'].values():
+        cookie = account.get('cookie', '')
+        # Redact individual form/Cookie values as well as the complete captured string.
+        for _, value in parse_qsl(cookie.replace(';', '&'), keep_blank_values=False):
+            if value.strip():
+                values.extend((value.strip(), unquote(value.strip())))
     return sorted(set(values), key=len, reverse=True)
 
 def redact(message, config):
@@ -100,10 +108,13 @@ def execute(config, selected=None):
             if '错误' in message and ('错误信息' in message or '出现了错误' in message):
                 message = '接口请求失败，请检查凭据、网络或上游接口变化'
             status = 'success' if ('签到成功' in message or '已经签到' in message or '签到过' in message or '进度已满' in message) else 'failed'
+            if '请在 App' in message or '请先在 App' in message:
+                status = 'action_required'
             results.append({'platform': key, 'name': name, 'status': status, 'message': redact(message, config)})
         except Exception as exc:
             results.append({'platform': key, 'name': name, 'status': 'failed',
                             'message': f'请求失败（{type(exc).__name__}），请检查登录状态、网络或接口变化'})
+        logging.getLogger('autosign').info('Platform %s completed: %s', key, results[-1]['status'])
     push_status = 'disabled'
     if results and config['push']['PushMode']:
         local.deadline = time.monotonic() + 60
