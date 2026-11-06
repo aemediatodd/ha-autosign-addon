@@ -10,8 +10,8 @@
 ## 发布镜像
 
 - GitHub Actions 的测试和 `linux/amd64`、`linux/arm64` 镜像构建成功。
-- GHCR 镜像 `ghcr.io/aemediatodd/ha-autosign-addon:0.1.0` 已验证可以匿名拉取。
-- 镜像索引摘要：`sha256:a3b1c26d672a0c551abb5ada1261271eb81882e5aa08d7196c6f141a5d47be92`。
+- GHCR 镜像 `ghcr.io/aemediatodd/ha-autosign-addon:0.1.1` 已验证可以匿名拉取。
+- 0.1.1 镜像索引摘要：`sha256:25097c70921c20b1cf0bd33a754cfff4435acb7ace0dd00b54364889cd6e8afb`。
 - 发布的 amd64 Linux 容器检查通过：模块与依赖导入、页面 HTTP、接口令牌保护、配置保存（0600 权限）、空执行、状态落盘。
 
 ## Home Assistant
@@ -20,7 +20,11 @@
 
 - HA 能连接 GHCR；原先本地构建因 Docker Hub EOF 失败，已改用预制镜像安装。
 - 5 个平台网页从 HA SSH 容器访问均返回 HTTP 200；该检查仅验证基础网络连通，不代表登录或签到成功。
-- 加载项安装请求已提交，目前在等待 HA 中另一项应用安装释放队列；首次启动与 HA Ingress 验证尚未完成。
+- 0.1.1 已在 HA 安装并首次启动成功，启动日志正常，容器状态 `started`。
+- 初始空闲资源：CPU 约 0.01%，内存约 20 MB。
+- 保留保护模式；未启用主机网络、Docker API、HA API 或 Supervisor API。
+- 从 SSH 加载项直接访问本应用 HTTP 返回预期的 403，要求经 HA Ingress 访问。
+- 已提供 HA 页面入口，请用户通过已登录的 HA Ingress 页面填写凭据并进行真实平台测试；该步骤尚待用户反馈。
 - 无账户检查发现旧版天翼登录页字段已删除，好游快爆旧 grow 接口已跳转；0.1.1 已按当前公开页面协议修复，尚待真实账户验证。
 
 ## 真实平台测试
